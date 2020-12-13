@@ -1,4 +1,5 @@
 use std::io::{Read, Write, Result};
+use std::io::ErrorKind::WouldBlock;
 use std::os::unix::io::AsRawFd;
 
 use crate::{Interest, System};
@@ -48,6 +49,8 @@ pub trait Reactor : Sized {
 pub struct PollReactor<T: AsRawFd> {
     inner: T,
     pub id: ReactorId,
+    pub writable: bool,
+    pub readable: bool,
 }
 
 impl<T: AsRawFd> PollReactor<T> {
@@ -58,6 +61,8 @@ impl<T: AsRawFd> PollReactor<T> {
         let instance = Self {
             inner,
             id,
+            writable: false,
+            readable: false,
         };
 
         Ok(instance)
@@ -101,7 +106,20 @@ impl<T: AsRawFd> AsMut<T> for PollReactor<T> {
 // -----------------------------------------------------------------------------
 impl<T: AsRawFd + Read> Read for PollReactor<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.as_mut().read(buf)
+        let res = self.as_mut().read(buf);
+
+        match res {
+            Ok(0) => self.readable = false,
+            Ok(_) => {}
+            Err(ref e) if e.kind() == WouldBlock => {
+                self.readable = false;
+                self.rearm(Interest::Read)?;
+            }
+            Err(_) => self.readable = false,
+
+        }
+
+        res
     }
 }
 
@@ -110,7 +128,17 @@ impl<T: AsRawFd + Read> Read for PollReactor<T> {
 // -----------------------------------------------------------------------------
 impl<T: AsRawFd + Write> Write for PollReactor<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.as_mut().write(buf)
+        let res = self.as_mut().write(buf);
+        match res {
+            Err(ref e) if e.kind() == WouldBlock => {
+                self.writable = false;
+                self.rearm(Interest::Write)?;
+            }
+            Err(_) => self.writable = false,
+            Ok(_) => {}
+        }
+
+        res
     }
 
     fn flush(&mut self) -> Result<()> {

@@ -14,8 +14,26 @@ pub type TcpListener = PollReactor<StdTcpListener>;
 
 impl TcpListener {
     pub fn bind<A: ToSocketAddrs>(addr: A) -> Result<Self> {
-        let listener = StdTcpListener::bind(addr)?;
-        listener.set_nonblocking(true)?;
+        // let listener = StdTcpListener::bind(addr)?;
+        // listener.set_nonblocking(true)?;
+        // Self::new(listener, Interest::Read)
+
+
+        let addr = match addr.to_socket_addrs()?.next() {
+            Some(a) => a,
+            None => panic!("TODO: this should be an io error"),
+        };
+        
+        // for a in addr.to_socket_addrs() {
+        // }
+
+        use net2::unix::*;
+        let mut listener = net2::TcpBuilder::new_v4().unwrap();
+        listener.reuse_port(true);
+        listener.bind(addr);
+
+        let listener = listener.listen(1024).unwrap();
+        listener.set_nonblocking(true);
         Self::new(listener, Interest::Read)
     }
 }

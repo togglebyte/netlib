@@ -46,14 +46,28 @@ impl Reactor for HttpServer {
             }
             Reaction::Continue => Reaction::Continue,
             Reaction::Event(ev) => {
-                if !ev.write {
-                    return Reaction::Continue;
-                }
+                // if !ev.write {
+                //     return Reaction::Continue;
+                // }
 
                 let b = &mut self.b;
                 let mut close = false;
+                if ev.read {
+                    self.con.get_mut(&ev.owner).map(|con| {
+                        con.readable = ev.read;
+                        while con.readable {
+                            con.read(b);
+                        }
+                    });
+                }
+
                 if let Some(mut con) = self.con.remove(&ev.owner) {
-                    con.write(&RESPONSE);
+                    let mut cnt = 0;
+                    con.writable = ev.write;
+                    con.readable = ev.read;
+                    while con.writable {
+                        con.write(&RESPONSE);
+                    }
                 }
                 Reaction::Continue
             }
@@ -62,11 +76,11 @@ impl Reactor for HttpServer {
 }
 
 fn main() -> Result<()> {
-    let thread_count = 1;
-    // let mut handles = Vec::new();
+    let thread_count = 8;
+    let mut handles = Vec::new();
     for thread_id in 0..thread_count {
-    //     let h = thread::spawn(move || -> Result<()> {
-    //         // Initialise the system
+        let h = thread::spawn(move || -> Result<()> {
+            // Initialise the system
             System::builder().finish();
 
             let listener = TcpListener::bind("127.0.0.1:9000")?
@@ -81,13 +95,13 @@ fn main() -> Result<()> {
             // Start the server
             System::start(server);
 
-    //         Ok(())
-    //     });
+            Ok(())
+        });
 
-    //     handles.push(h);
+        handles.push(h);
     }
 
-    // handles.into_iter().map(|h| h.join()).count();
+    handles.into_iter().map(|h| h.join()).count();
 
     Ok(())
 }
