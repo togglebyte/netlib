@@ -4,5 +4,9 @@ version = "0.1.0"
 authors = ["Togglebit <me@togglebit.io>"]
 edition = "2018"
 
+[profile.release]
+debug = true
+
 [dependencies]
 libc = "0.2.80"
+log = "0.4.11"

@@ -25,12 +25,14 @@ let listener = TcpListener::bind("0.0.0.0:9000")?;
 let connection_handler = ConnectionHandler::new();
 
 // listener -> connection handler
-let networkng = listener.chain(connection_handler);
+let networking = listener.chain(connection_handler);
 
 // join the game loop with the networking component
-let game = game_loop.join(neworking)
+let game = game_loop.join(networking)
 
 system.start(game);
 ```
 
+System -> [listener] -> [tcp stream] -> ?how do we register this stream
 
+* Make System TLS
