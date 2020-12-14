@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::ErrorKind::WouldBlock;
 use std::io::{Read, Result, Write};
 use std::thread;
+use std::net::SocketAddr;
 
 use netlib::net::tcp::{TcpListener, TcpStream};
 use netlib::{Interest, Reaction, Reactor, System};
@@ -35,15 +36,17 @@ impl HttpServer {
 }
 
 impl Reactor for HttpServer {
-    type Input = TcpStream;
+    type Input = Result<(std::net::TcpStream, SocketAddr)>;
     type Output = ();
 
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
-            Reaction::Value(stream) => {
+            Reaction::Value(Ok((stream, _))) => {
+                let stream = TcpStream::new(stream, Interest::ReadWrite).unwrap();
                 self.con.insert(stream.id, stream);
                 Reaction::Continue
             }
+            Reaction::Value(_) => Reaction::Continue,
             Reaction::Continue => Reaction::Continue,
             Reaction::Event(ev) => {
                 // if !ev.write {
@@ -83,12 +86,12 @@ fn main() -> Result<()> {
             // Initialise the system
             System::builder().finish();
 
-            let listener = TcpListener::bind("127.0.0.1:9000")?
-                .map(Result::unwrap)
-                .map(|(stream, _)| {
-                stream.set_nonblocking(true);
-                TcpStream::new(stream, Interest::ReadWrite).unwrap()
-            });
+            let listener = TcpListener::bind("127.0.0.1:9000")?;
+                // .map(Result::unwrap)
+                // .map(|(stream, _)| {
+                // stream.set_nonblocking(true);
+                // TcpStream::new(stream, Interest::ReadWrite).unwrap()
+            
 
             let server = listener.chain(HttpServer::new(thread_id));
 

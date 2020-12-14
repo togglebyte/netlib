@@ -3,8 +3,9 @@ use std::io::Result;
 use std::net::{
     Shutdown, SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream, ToSocketAddrs,
 };
+use std::os::unix::io::FromRawFd;
 
-
+use super::socket::Socket;
 use crate::{Interest, PollReactor, Reaction, Reactor};
 
 // -----------------------------------------------------------------------------
@@ -14,26 +15,11 @@ pub type TcpListener = PollReactor<StdTcpListener>;
 
 impl TcpListener {
     pub fn bind<A: ToSocketAddrs>(addr: A) -> Result<Self> {
-        // let listener = StdTcpListener::bind(addr)?;
-        // listener.set_nonblocking(true)?;
-        // Self::new(listener, Interest::Read)
+        let addr = addr.to_socket_addrs()?.next().expect("Invalid address");
+        let socket = Socket::new(Ok(&addr))?; // and this
 
-
-        let addr = match addr.to_socket_addrs()?.next() {
-            Some(a) => a,
-            None => panic!("TODO: this should be an io error"),
-        };
-        
-        // for a in addr.to_socket_addrs() {
-        // }
-
-        use net2::unix::*;
-        let mut listener = net2::TcpBuilder::new_v4().unwrap();
-        listener.reuse_port(true);
-        listener.bind(addr);
-
-        let listener = listener.listen(1024).unwrap();
-        listener.set_nonblocking(true);
+        let listener = unsafe { StdTcpListener::from_raw_fd(socket.0) };
+        listener.set_nonblocking(true)?;
         Self::new(listener, Interest::Read)
     }
 }
@@ -45,12 +31,13 @@ impl Reactor for TcpListener {
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
             Reaction::Event(ev) if ev.owner != self.id => Reaction::Event(ev),
-            _ => {
+            Reaction::Event(ev) if ev.read => {
                 match self.rearm(Interest::Read) {
-                    Ok(_) => Reaction::Value(self.as_mut().accept()),
                     Err(e) => Reaction::Value(Err(e)),
+                    Ok(_) => Reaction::Value(self.as_mut().accept())
                 }
             }
+            _ => Reaction::Continue,
         }
     }
 }

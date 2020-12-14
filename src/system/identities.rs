@@ -1,5 +1,4 @@
 use std::mem::swap;
-use log::error;
 
 #[derive(Debug, Clone, Copy)] 
 enum Identity {
@@ -39,7 +38,9 @@ impl Identities {
                 swap(&mut vacant, &mut occ);
                 self.next = index as usize;
             }
-            Identity::Vacant { .. } => error!("tried to free a vacant entry"),
+            Identity::Vacant { .. } => {
+                // TODO  "add error log: tried to free a vacant entry"
+            }
         }
 
 

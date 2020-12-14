@@ -10,5 +10,3 @@ panic = 'abort'
 
 [dependencies]
 libc = "0.2.80"
-log = "0.4.11"
-net2 = "0.2.37"
