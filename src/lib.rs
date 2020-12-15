@@ -3,9 +3,13 @@ pub mod errors;
 
 mod reactor;
 mod system;
+mod codecs;
+mod signals;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System};
+pub use system::userfd::Evented;
+pub use errors::{Error, Result};
 
 #[derive(Debug)]
 pub struct Event {

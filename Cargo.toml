@@ -10,3 +10,5 @@ panic = 'abort'
 
 [dependencies]
 libc = "0.2.80"
+crossbeam = "0.8.0"
+parking_lot = "0.11.1"

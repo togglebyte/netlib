@@ -73,8 +73,8 @@ fn epoll_control(epoll_fd: i32, fd: i32, interest: Interest, user_data: u64, op:
 // -----------------------------------------------------------------------------
 //     - Epoll wait -
 // -----------------------------------------------------------------------------
-pub fn wait(epoll_fd: i32, events: &mut [libc::epoll_event], max_events: i32) -> Result<usize> {
-    let result = unsafe { libc::epoll_wait(epoll_fd, events.as_mut_ptr(), max_events, 1_000) };
+pub fn wait(epoll_fd: i32, events: &mut [libc::epoll_event], max_events: i32, timeout: i32) -> Result<usize> {
+    let result = unsafe { libc::epoll_wait(epoll_fd, events.as_mut_ptr(), max_events, timeout) };
     Ok(res!(result) as usize)
 }
 
@@ -102,17 +102,3 @@ impl Flags {
         0 != (val & flag)
     }
 }
-
-// #[repr(C)]
-// #[packed]
-// pub struct Event {
-//     flags: u32,
-//     user_data: u64,
-// }
-
-// impl Event {
-//     pub fn has_flag(&self, flag: Flags) -> bool {
-//         self.flags & flag as u32 != 0
-//     }
-// }
-

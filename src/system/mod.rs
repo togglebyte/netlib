@@ -6,6 +6,7 @@ use crate::{Reaction, Reactor};
 
 mod identities;
 mod epoll;
+pub(crate) mod userfd;
 
 use identities::Identities;
 use epoll::Flags;
@@ -46,7 +47,7 @@ impl SystemBuilder {
     /// Finish the `System` and set it up for the local thread.
     pub fn finish(self) {
         let reactor_ids = self.id_capacity.unwrap_or(1024);
-        let event_cap = self.event_cap.unwrap_or(1024);
+        let event_cap = self.event_cap.unwrap_or(10);
 
         let sys = System::init(event_cap, reactor_ids);
 
@@ -142,9 +143,16 @@ impl System {
         let mut events: Vec<libc::epoll_event> = Vec::with_capacity(capacity);
         unsafe { events.set_len(capacity) };
 
+        let timeout = 0;
+        // Have zero ms timeout for epoll.
+        // Have timeout at application level.
+        //
+        // 1. Check epoll events
+        // 2. Check user defined events
+        // 3. ??? <-- don't cook the fish
         loop {
             let count = SYSTEM
-                .with(|sys| epoll::wait(sys.borrow().epoll_fd, &mut events, capacity as i32))?;
+                .with(|sys| epoll::wait(sys.borrow().epoll_fd, &mut events, capacity as i32, timeout))?;
 
             for epoll_event in events.drain(..count) {
                 let event = crate::Event {
@@ -157,6 +165,7 @@ impl System {
             }
 
             unsafe { events.set_len(capacity) };
+            // Run game loop
         }
     }
 
