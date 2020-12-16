@@ -1,6 +1,6 @@
 use std::io::Error as IoError;
 
-use crossbeam::channel::TryRecvError;
+use crossbeam::channel::{RecvError, TryRecvError};
 use libc::__errno_location as errno_loc;
 
 pub fn os_err() -> std::io::Error {
@@ -16,7 +16,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Io(IoError),
-    Recv(TryRecvError)
+    TryRecv(TryRecvError),
+    Recv(RecvError),
 }
 
 // -----------------------------------------------------------------------------
@@ -33,6 +34,12 @@ impl From<IoError> for Error {
 // -----------------------------------------------------------------------------
 impl From<TryRecvError> for Error {
     fn from(e: TryRecvError) -> Self {
+        Error::TryRecv(e)
+    }
+}
+
+impl From<RecvError> for Error {
+    fn from(e: RecvError) -> Self {
         Error::Recv(e)
     }
 }

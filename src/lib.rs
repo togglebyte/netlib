@@ -1,5 +1,6 @@
 pub mod net;
 pub mod signals;
+pub mod queue;
 
 mod errors;
 mod reactor;
@@ -7,9 +8,9 @@ mod system;
 mod codecs;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
-pub use system::{Interest, System};
+pub use system::{Interest, System, SysEvent};
 pub use system::evented::Evented;
-pub use errors::{Error, Result};
+pub use errors::{Error, Result, os_err};
 
 #[derive(Debug)]
 pub struct Event {
@@ -22,7 +23,7 @@ pub struct Event {
 macro_rules! res {
     ($e:expr) => {
         match $e {
-            -1 => return Err(crate::errors::Error::Io(crate::errors::os_err().into())),
+            -1 => return Err(crate::Error::Io(crate::os_err())),
             val => val
         }
     }

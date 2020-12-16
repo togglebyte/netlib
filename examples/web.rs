@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::thread;
 
 use netlib::net::tcp::{TcpListener, TcpStream};
-use netlib::{Interest, Reaction, Reactor, System};
+use netlib::{Interest, Reaction, Reactor, System, signals};
 
 // Connection: Closed
 // const RESPONSE: &'static [u8] = br#"HTTP/1.1 200 OK

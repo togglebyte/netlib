@@ -1,68 +1,110 @@
-// use std::io::{Read, Result};
-// use std::os::unix::io::AsRawFd;
-// use std::thread;
+use std::collections::HashMap;
+use std::io::ErrorKind::WouldBlock;
+use std::io::{Read, Write};
+use std::net::SocketAddr;
+use std::thread;
 
-// use netlib::{Reaction, Reactor, System, Evented};
+use netlib::net::tcp::{TcpListener, TcpStream};
+use netlib::{Interest, Reaction, Reactor, System, signals::signal, Result};
 
-// struct MyData {
-//     counter: usize,
-//     user_fd: Evented,
-// }
+// Connection: Closed
+// const RESPONSE: &'static [u8] = br#"HTTP/1.1 200 OK
+// Server: Lark
+// Content-Length: 600
+// content-type: text/html; charset=UTF-8
 
-// impl MyData {
-//     fn new() -> Result<Self> {
-//         let user_fd = Evented::new()?;
+// hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello
+// "#;
+static RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\nContent-Length: 13\n\nhello world\n\n";
 
-//         let inst = Self {
-//             counter: 0,
-//             user_fd,
-//         };
+pub struct HttpServer {
+    thread_id: usize,
+    msg_count: usize,
+    b: [u8; 1024],
+    con: HashMap<u64, TcpStream>,
+}
 
-//         Ok(inst)
-//     }
+impl HttpServer {
+    pub fn new(thread_id: usize) -> Self {
+        Self {
+            thread_id,
+            msg_count: 0,
+            b: [0; 1024],
+            con: HashMap::new(),
+        }
+    }
+}
 
-//     fn poke(&mut self) {
-//         self.user_fd.poke();
-//     }
-// }
+impl Reactor for HttpServer {
+    type Input = TcpStream;
+    type Output = ();
 
-// impl AsRawFd for MyData {
-//     fn as_raw_fd(&self) -> i32 {
-//         self.user_fd.as_raw_fd()
-//     }
-// }
+    fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
+        match reaction {
+            Reaction::Value(stream) => {
+                self.con.insert(stream.id, stream);
+                Reaction::Continue
+            }
+            Reaction::Value(_) => Reaction::Continue,
+            Reaction::Continue => Reaction::Continue,
+            Reaction::Event(ev) => {
+                let b = &mut self.b;
+                let mut close = false;
+                self.con.get_mut(&ev.owner).map(|con| {
+                    con.writable = ev.write;
+                    con.readable = ev.read;
 
-// impl Reactor for MyData {
-//     type Input = ();
-//     type Output = ();
+                    while con.readable {
+                        con.read(b);
+                    }
 
-//     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
-//         eprintln!("{}", self.counter);
-//         self.counter += 1;
-//         eprintln!("reacted");
-//         // let mut buf = [0;128];
-//         // let _ = self.user_fd.read(&mut buf);
-//         let x = self.user_fd.rearm();
-//         // thread::sleep(std::time::Duration::from_secs(1));
-//         eprintln!("{:?}", x);
-//         match reaction {
-//             Reaction::Value(val) => Reaction::Value(val),
-//             Reaction::Continue => Reaction::Continue,
-//             Reaction::Event(ev) => Reaction::Event(ev),
-//         }
-//     }
-// }
+                    while con.writable {
+                        con.write(&RESPONSE);
+                    }
+                });
+                Reaction::Continue
+            }
+        }
+    }
+}
 
-// fn main() -> Result<()> {
-//     let handle = System::builder().finish();
-//     handle.send(SysEvent::Stop);
+fn main() -> Result<()> {
+    let thread_count = 8;
+    // let mut handles = Vec::new();
 
-//     let my_data = MyData::new()?;
-//     System::start(my_data)?;
-//     Ok(())
-// }
+    // let (rx, tx) = signal();
 
+    let listener = TcpListener::bind("127.0.0.1:9000")?
+        .map(Result::unwrap)
+        .map(|(stream, _)| {
+            stream.set_nonblocking(true);
+            TcpStream::new(stream, Interest::ReadWrite).unwrap()
+        });
 
-fn main() {
+    // for thread_id in 0..thread_count {
+    //     let h = thread::spawn(move || -> Result<()> {
+    //         // Initialise the system
+    //         System::builder().finish()?;
 
+    //         let listener = TcpListener::bind("127.0.0.1:9000")?
+    //             .map(Result::unwrap)
+    //             .map(|(stream, _)| {
+    //                 stream.set_nonblocking(true);
+    //                 TcpStream::new(stream, Interest::ReadWrite).unwrap()
+    //             });
+
+    //         let server = listener.chain(HttpServer::new(thread_id));
+
+    //         // Start the server
+    //         System::start(server)?;
+
+    //         Ok(())
+    //     });
+
+    //     handles.push(h);
+    // }
+
+    // handles.into_iter().map(|h| h.join()).count();
+
+    Ok(())
 }

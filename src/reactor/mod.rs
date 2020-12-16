@@ -21,6 +21,16 @@ pub enum Reaction<T> {
     Event(crate::Event),
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for Reaction<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Reaction::Continue => write!(f, "Continue"),
+            Reaction::Value(val) => write!(f, "Value: {:?}", val),
+            Reaction::Event(ev) => write!(f, "Event: {:?}", ev),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 //     - Reactor -
 // -----------------------------------------------------------------------------

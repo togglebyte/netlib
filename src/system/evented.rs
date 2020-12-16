@@ -15,8 +15,8 @@ pub struct Evented {
 
 impl Evented {
     pub fn new() -> Result<Self> {
-        let flags = libc::EFD_CLOEXEC | libc::EFD_NONBLOCK | libc::EFD_SEMAPHORE;
-        let fd = res!(unsafe { eventfd(2, flags) });
+        let flags = libc::EFD_CLOEXEC | libc::EFD_NONBLOCK;// | libc::EFD_SEMAPHORE;
+        let fd = res!(unsafe { eventfd(0, flags) });
         let reactor_id = System::reserve();
 
         System::arm(&fd, Interest::Read, reactor_id)?;
@@ -33,9 +33,10 @@ impl Evented {
         System::rearm(&self.fd, Interest::Read, self.reactor_id)
     }
 
-    pub fn poke(&mut self) {
-        let val = 0u64.to_be_bytes();
-        let _ = self.write(&val);
+    pub fn poke(&mut self) -> Result<()> {
+        let val = 1u64.to_be_bytes();
+        self.write(&val)?;
+        Ok(())
     }
 }
 
