@@ -1,6 +1,6 @@
 // use std::os::unix::io::AsRawFd;
 // use std::io::{Write, Read, Result};
-use std::io::Result;
+use crate::Result;
 
 // use netlib::{Interest, Reaction, Reactor, System};
 // use netlib::net::tcp::{TcpListener, TcpStream};

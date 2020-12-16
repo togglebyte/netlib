@@ -1,10 +1,10 @@
-use std::io::{Write, Read, Result};
+use std::io::{self, Write, Read};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::fs::File;
 
 use libc::eventfd;
 
-use crate::{Interest, res};
+use crate::{Interest, res, Result};
 use super::System;
 
 #[derive(Debug, Copy, Clone)]
@@ -52,13 +52,12 @@ impl AsRawFd for Evented {
 //     - Write -
 // -----------------------------------------------------------------------------
 impl Write for Evented {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut file = unsafe { File::from_raw_fd(self.fd) };
-        let res = file.write(buf);
-        res
+        file.write(buf)
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -67,9 +66,8 @@ impl Write for Evented {
 //     - Read -
 // -----------------------------------------------------------------------------
 impl Read for Evented {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut file = unsafe { File::from_raw_fd(self.fd) };
-        let res = file.read(buf);
-        res
+        file.read(buf)
     }
 }

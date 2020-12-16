@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use std::net::SocketAddr;
 
 use libc::{c_int, c_void, socklen_t, sockaddr};

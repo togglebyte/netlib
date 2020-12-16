@@ -13,6 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // -----------------------------------------------------------------------------
 //     - Erro -
 // -----------------------------------------------------------------------------
+#[derive(Debug)]
 pub enum Error {
     Io(IoError),
     Recv(TryRecvError)

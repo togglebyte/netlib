@@ -1,8 +1,8 @@
-use std::io::{Read, Write, Result};
+use std::io::{self, Read, Write};
 use std::io::ErrorKind::WouldBlock;
 use std::os::unix::io::AsRawFd;
 
-use crate::{Interest, System};
+use crate::{Interest, System, Result};
 
 mod combinators;
 mod consumers;
@@ -104,7 +104,7 @@ impl<T: AsRawFd> AsMut<T> for PollReactor<T> {
 //     - Read -
 // -----------------------------------------------------------------------------
 impl<T: AsRawFd + Read> Read for PollReactor<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let res = self.as_mut().read(buf);
 
         match res {
@@ -112,7 +112,7 @@ impl<T: AsRawFd + Read> Read for PollReactor<T> {
             Ok(_) => {}
             Err(ref e) if e.kind() == WouldBlock => {
                 self.readable = false;
-                self.rearm(Interest::Read)?;
+                self.rearm(Interest::Read);
             }
             Err(_) => self.readable = false,
 
@@ -126,22 +126,22 @@ impl<T: AsRawFd + Read> Read for PollReactor<T> {
 //     - Write -
 // -----------------------------------------------------------------------------
 impl<T: AsRawFd + Write> Write for PollReactor<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let res = self.as_mut().write(buf);
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
                 self.writable = false;
-                self.rearm(Interest::Write)?;
+                self.rearm(Interest::Write);
             }
             Err(_) => self.writable = false,
             Ok(_) => {}
         }
 
-        res
+        Ok(res?)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.as_mut().flush()
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(self.as_mut().flush()?)
     }
 }
 

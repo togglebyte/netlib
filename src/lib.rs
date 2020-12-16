@@ -1,14 +1,14 @@
 pub mod net;
-pub mod errors;
+pub mod signals;
 
+mod errors;
 mod reactor;
 mod system;
 mod codecs;
-mod signals;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System};
-pub use system::userfd::Evented;
+pub use system::evented::Evented;
 pub use errors::{Error, Result};
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct Event {
 macro_rules! res {
     ($e:expr) => {
         match $e {
-            -1 => return Err(crate::errors::os_err()),
+            -1 => return Err(crate::errors::Error::Io(crate::errors::os_err().into())),
             val => val
         }
     }

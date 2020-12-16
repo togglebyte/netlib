@@ -1,12 +1,12 @@
 use std::cell::RefCell;
-use std::io::Result;
 use std::os::unix::io::AsRawFd;
 
-use crate::{Reaction, Reactor};
+use crate::{Reaction, Reactor, Result};
+use crate::signals::{Sender, Receiver, signal};
 
 mod identities;
 mod epoll;
-pub(crate) mod userfd;
+pub(crate) mod evented;
 
 use identities::Identities;
 use epoll::Flags;
@@ -17,6 +17,10 @@ pub use epoll::Interest;
 // -----------------------------------------------------------------------------
 thread_local! {
     pub static SYSTEM: RefCell<System> = RefCell::new(System::empty());
+}
+
+pub enum SysEvent {
+    Stop,
 }
 
 // -----------------------------------------------------------------------------
@@ -45,13 +49,16 @@ impl SystemBuilder {
     }
 
     /// Finish the `System` and set it up for the local thread.
-    pub fn finish(self) {
+    pub fn finish(self) -> Result<Sender<SysEvent>> {
         let reactor_ids = self.id_capacity.unwrap_or(1024);
         let event_cap = self.event_cap.unwrap_or(10);
 
-        let sys = System::init(event_cap, reactor_ids);
+        let (tx, rx) = signal()?;
+        let sys = System::init(event_cap, reactor_ids, rx);
 
         SYSTEM.with(|existing| *existing.borrow_mut() = sys);
+
+        Ok(tx)
     }
 }
 
@@ -62,6 +69,7 @@ pub struct System {
     epoll_fd: i32,
     identities: Identities,
     event_cap: usize,
+    rx: Option<Receiver<SysEvent>>,
 }
 
 impl System {
@@ -70,16 +78,18 @@ impl System {
             epoll_fd: 0,
             identities: Identities::empty(),
             event_cap: 0,
+            rx: None,
         }
     }
 
     /// This has to happen before a system is used.
-    fn init(event_cap: usize, id_cap: usize) -> Self {
+    fn init(event_cap: usize, id_cap: usize, rx: Receiver<SysEvent>) -> Self {
         let epoll_fd = epoll::create().expect("Failed to get epoll file descriptor");
         Self { 
             epoll_fd,
             event_cap,
             identities: Identities::with_capacity(id_cap),
+            rx: Some(rx),
         }
     }
 
@@ -117,7 +127,8 @@ impl System {
                 interest,
                 reactor_id,
             )
-        })
+        })?;
+        Ok(())
     }
 
     /// Rearm the reactor with epoll.
@@ -131,7 +142,8 @@ impl System {
                 interest,
                 reactor_id,
             )
-        })
+        })?;
+        Ok(())
     }
 
     /// Start polling for events.

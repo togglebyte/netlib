@@ -1,6 +1,22 @@
-use crossbeam::channel::{Receiver as CBReceiver, Sender as CBSender};
+use crossbeam::channel::{Receiver as CBReceiver, Sender as CBSender, unbounded};
 
 use crate::{Evented, Reaction, Reactor, Result};
+
+pub fn signal<T>() -> Result<(Sender<T>, Receiver<T>)> {
+    let (tx, rx) = unbounded();
+
+    let tx = Sender {
+        tx,
+        evented: Evented::new()?,
+    };
+
+    let rx = Receiver {
+        rx,
+        evented: tx.evented.clone(),
+    };
+
+    Ok((tx, rx))
+}
 
 // -----------------------------------------------------------------------------
 //     - Reveiver -

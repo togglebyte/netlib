@@ -26,7 +26,7 @@ macro_rules! res {
     };
 }
 
-pub unsafe fn run() -> io::Result<()> {
+pub unsafe fn run() -> crate::Result<()> {
     let listener_flags = EPOLLIN as u32 | EPOLLET as u32 | EPOLLONESHOT as u32;
     let con_flags = EPOLLIN as u32 | EPOLLET as u32 | EPOLLONESHOT as u32;
 

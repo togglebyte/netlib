@@ -1,6 +1,4 @@
-use std::io::Result;
-
-use crate::res;
+use crate::{res, Result};
 
 // -----------------------------------------------------------------------------
 //     - Epoll abstraction -
@@ -75,7 +73,8 @@ fn epoll_control(epoll_fd: i32, fd: i32, interest: Interest, user_data: u64, op:
 // -----------------------------------------------------------------------------
 pub fn wait(epoll_fd: i32, events: &mut [libc::epoll_event], max_events: i32, timeout: i32) -> Result<usize> {
     let result = unsafe { libc::epoll_wait(epoll_fd, events.as_mut_ptr(), max_events, timeout) };
-    Ok(res!(result) as usize)
+    let result = res!(result) as usize;
+    Ok(result)
 }
 
 
