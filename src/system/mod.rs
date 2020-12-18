@@ -7,6 +7,7 @@ use crate::signals::{Sender, Receiver, signal};
 mod identities;
 mod epoll;
 pub(crate) mod evented;
+pub(crate) mod timer;
 
 use identities::Identities;
 use epoll::Flags;
@@ -200,8 +201,6 @@ impl System {
                     write: Flags::contains(epoll_event.events, Flags::Write),
                     owner: epoll_event.u64,
                 };
-
-                eprintln!("{:?}", epoll_event.events);
 
                 let reaction = Reaction::Event(event);
 

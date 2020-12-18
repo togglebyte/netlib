@@ -10,6 +10,7 @@ mod codecs;
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System, SysEvent};
 pub use system::evented::Evented;
+pub use system::timer::Timer;
 pub use errors::{Error, Result, os_err};
 
 #[derive(Debug)]

@@ -21,6 +21,11 @@ impl<T> Worker<T> {
     pub fn dequeue(&self) -> Stealer<T> {
         Stealer::new(self.inner.stealer(), self.evented.clone())
     }
+
+    pub fn send(&mut self, val: T) {
+        self.evented.poke();
+        self.inner.push(val)
+    }
 }
 
 impl<T> Reactor for Worker<T> {
@@ -31,8 +36,7 @@ impl<T> Reactor for Worker<T> {
         match reaction {
             Reaction::Event(ev) => Reaction::Event(ev),
             Reaction::Value(val) => {
-                self.evented.poke();
-                Reaction::Value(self.inner.push(val))
+                Reaction::Value(self.send(val))
             }
             Reaction::Continue => Reaction::Continue,
         }
