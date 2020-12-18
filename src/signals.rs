@@ -41,22 +41,21 @@ impl<T> Reactor for Receiver<T> {
     type Input = ();
     type Output = Result<T>;
 
+
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
-            Reaction::Event(ev) => match ev.owner == self.evented.reactor_id {
-                true => match self.evented.rearm() {
-                    Err(e) => Reaction::Value(Err(e.into())),
-                    Ok(()) => match self.rx.recv() {
-                        Ok(val) => {
-                            eprintln!("{:?}", "you are here");
-                            Reaction::Value(Ok(val))
-                        }
-                        Err(e) => Reaction::Value(Err(e.into())),
-                    },
-                },
-                false => Reaction::Event(ev),
-            },
-            Reaction::Value(_) | Reaction::Continue => Reaction::Continue,
+            Reaction::Event(ev) if ev.owner != self.evented.reactor_id => Reaction::Event(ev),
+            Reaction::Value(()) | Reaction::Continue => Reaction::Continue,
+            Reaction::Event(ev) => {
+                self.evented.consume_event();
+
+                let val = match self.rx.recv() {
+                    Ok(val) => Ok(val),
+                    Err(e) => Err(e.into()),
+                };
+
+                Reaction::Value(val)
+            }
         }
     }
 }

@@ -66,7 +66,7 @@ impl<T> Reactor for Stealer<T> {
         match reaction {
             Reaction::Event(ev) if ev.owner != self.evented.reactor_id => Reaction::Event(ev),
             Reaction::Event(ev) => {
-                let res = self.evented.rearm();
+                let res = self.evented.consume_event();
                 loop {
                     let res = self.inner.steal();
 

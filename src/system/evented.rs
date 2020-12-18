@@ -21,25 +21,28 @@ impl Evented {
 
         System::arm(&fd, Interest::Read, reactor_id)?;
 
-        let inst = Self { fd, reactor_id };
+        let inst = Self {
+            fd,
+            reactor_id,
+        };
 
         Ok(inst)
     }
 
-    pub fn do_read(&mut self) {
-        let mut val = [0u8; 8];
-        let res = self.read(&mut val);
-        eprintln!("read {:?}", val);
+    pub fn consume_event(&mut self) -> Result<()> {
+        let mut buf = [0u8; 8];
+        let res = self.read(&mut buf)?;
+        let res = self.rearm()?;
+        Ok(())
     }
 
-    pub fn rearm(&mut self) -> Result<()> {
+    fn rearm(&mut self) -> Result<()> {
         System::rearm(&self.fd, Interest::Read, self.reactor_id)
     }
 
     pub fn poke(&mut self) -> Result<()> {
         let val = 1u64.to_be_bytes();
-        let x = self.write(&val);
-        eprintln!("write: {:?}", x);
+        let _ = self.write(&val)?;
         Ok(())
     }
 }
@@ -63,8 +66,7 @@ impl Write for Evented {
         let res = unsafe { libc::write(self.fd, p, len) };
         match res {
             -1 => Err(crate::errors::os_err()),
-            0 => panic!("nope"),
-            n => Ok(n as usize)
+            n => Ok(n as usize),
         }
     }
 
@@ -83,8 +85,7 @@ impl Read for Evented {
         let res = unsafe { libc::read(self.fd, p, len) };
         match res {
             -1 => Err(crate::errors::os_err()),
-            0 => panic!("nope"),
-            n => Ok(n as usize)
+            n => Ok(n as usize),
         }
     }
 }

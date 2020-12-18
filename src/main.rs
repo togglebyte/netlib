@@ -2,62 +2,37 @@ use std::io::Read;
 use std::os::unix::io::AsRawFd;
 use std::thread;
 
-use netlib::{Evented, Reaction, Reactor, Result, System, SysEvent};
+use netlib::queue::{Stealer, Worker};
+use netlib::{Evented, Reaction, Reactor, Result, SysEvent, System};
 
-struct MyData {
-    evented: Evented,
+struct Provider {
+    worker: Worker<usize>,
 }
 
-impl MyData {
-    fn new() -> Result<Self> {
-        let evented = Evented::new()?;
-
-        let inst = Self {
-            evented,
-        };
-
-        Ok(inst)
-    }
-}
-
-impl AsRawFd for MyData {
-    fn as_raw_fd(&self) -> i32 {
-        self.evented.as_raw_fd()
-    }
-}
-
-impl Reactor for MyData {
-    type Input = ();
-    type Output = ();
-
-    fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
-        match reaction {
-            Reaction::Value(val) => Reaction::Value(val),
-            Reaction::Continue => Reaction::Continue,
-            Reaction::Event(ev) if ev.owner != self.evented.reactor_id => Reaction::Event(ev),
-            Reaction::Event(ev) => {
-                eprintln!("reaction happened");
-                self.evented.do_read();
-                let res = self.evented.rearm();
-                Reaction::Event(ev) 
-            }
-        }
+impl Provider {
+    fn send(&mut self, val: usize) {
+        self.worker.react(Reaction::Value(val));
     }
 }
 
 fn main() -> Result<()> {
     System::builder().finish();
 
-    let my_data = MyData::new()?;
+    let provider = Provider {
+        worker: Worker::new()?,
+    };
 
-    let mut evented = my_data.evented.clone();
-    thread::spawn(move ||  {
-        loop {
-            thread::sleep_ms(1000);
-            evented.poke();
-        }
-    });
+    let thread_count = 10;
 
-    System::start(my_data)?;
+    for thread_id in 0..thread_count {
+        let mut stealer = provider.worker.dequeue();
+        thread::spawn(move || {
+            System::builder().finish();
+            let r = stealer.map(|val| eprintln!("{} | {}", thread_id, val));
+            System::start(r);
+        });
+    }
+
+    // System::start(r)?;
     Ok(())
 }
