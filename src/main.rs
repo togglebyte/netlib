@@ -19,7 +19,7 @@ impl Provider {
     fn new() -> Result<Self> {
         let inst = Self {
             worker: Worker::new()?,
-            timer: Timer::new(Duration::new(2, 0), Some(Duration::new(1, 0)))?,
+            timer: Timer::new(Duration::new(2, 0), Some(Duration::from_millis(1000)))?,
         };
 
         Ok(inst)
@@ -62,6 +62,7 @@ fn main() -> Result<()> {
         let mut stealer = provider.worker.dequeue();
         thread::spawn(move || {
             System::builder().finish();
+            stealer.arm();
             let r = stealer.map(|val| eprintln!("{} | {}", thread_id, val));
             System::start(r);
         });
