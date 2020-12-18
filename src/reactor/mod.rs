@@ -65,6 +65,7 @@ pub struct PollReactor<T: AsRawFd> {
 impl<T: AsRawFd> PollReactor<T> {
     pub fn new(inner: T, interest: Interest) -> Result<Self> {
         let id = System::reserve();
+        eprintln!("{:?}", id);
         System::arm(&inner, interest, id)?;
 
         let instance = Self {

@@ -42,7 +42,6 @@ impl<T> Reactor for Receiver<T> {
     type Output = Result<T>;
 
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
-        eprintln!("rec: {:?}", reaction);
         match reaction {
             Reaction::Event(ev) => match ev.owner == self.evented.reactor_id {
                 true => match self.evented.rearm() {

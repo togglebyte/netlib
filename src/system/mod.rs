@@ -16,12 +16,18 @@ pub use epoll::Interest;
 //     - TLS System -
 // -----------------------------------------------------------------------------
 thread_local! {
-    pub static SYSTEM: RefCell<System> = RefCell::new(System::empty());
+    pub static SYSTEM: RefCell<SystemState> = RefCell::new(SystemState::Empty);
 }
 
 #[derive(Debug, Clone, Copy)] 
 pub enum SysEvent {
     Stop,
+}
+
+pub enum SystemState {
+    Empty,
+    Running(System),
+    Stopped(System),
 }
 
 // -----------------------------------------------------------------------------
@@ -50,22 +56,21 @@ impl SystemBuilder {
     }
 
     /// Finish the `System` and set it up for the local thread.
-    pub fn finish(self) -> Result<Sender<SysEvent>> {
+    pub fn finish(self) {//-> Result<Sender<SysEvent>> {
         let reactor_ids = self.id_capacity.unwrap_or(1024);
         let event_cap = self.event_cap.unwrap_or(10);
 
         let sys = System::init(event_cap, reactor_ids);
 
-        SYSTEM.with(|existing| *existing.borrow_mut() = sys);
+        SYSTEM.with(|existing| *existing.borrow_mut() = SystemState::Running(sys));
 
-        let (tx, rx) = signal()?;
-        SYSTEM.with(|existing| {
-            let mut sys = existing.borrow_mut();
-            sys.rx = Some(rx);
-            sys.initialized = true;
-        });
+        // let (tx, rx) = signal()?;
+        // SYSTEM.with(|existing| {
+        //     existing.borrow_mut().rx = Some(rx);
+        //     eprintln!("{:?}", existing.borrow_mut().initialized );
+        // });
 
-        Ok(tx)
+        // Ok(tx)
     }
 }
 
@@ -77,20 +82,9 @@ pub struct System {
     identities: Identities,
     event_cap: usize,
     rx: Option<Receiver<SysEvent>>,
-    initialized: bool,
 }
 
 impl System {
-    fn empty() -> Self {
-        Self {
-            epoll_fd: 0,
-            identities: Identities::empty(),
-            event_cap: 0,
-            rx: None,
-            initialized: false,
-        }
-    }
-
     /// This has to happen before a system is used.
     fn init(event_cap: usize, id_cap: usize) -> Self {
         let epoll_fd = epoll::create().expect("Failed to get epoll file descriptor");
@@ -99,7 +93,6 @@ impl System {
             event_cap,
             identities: Identities::with_capacity(id_cap),
             rx: None,
-            initialized: false,
         }
     }
 
@@ -119,30 +112,37 @@ impl System {
 
     /// Reserve an id for a reactor
     pub(crate) fn reserve() -> u64 {
-        SYSTEM.with(|sys| sys.borrow_mut().identities.reserve())
+        SYSTEM.with(|sys| match *sys.borrow_mut() {
+            SystemState::Empty => panic!("System is uninitialized"),
+            SystemState::Running(ref mut s) => s.identities.reserve(),
+            SystemState::Stopped(_) => panic!("System stopped"),
+        })
     }
 
     /// Free an id for a reactor. 
     /// This should happen when the reactor is no longer in use.
     pub(crate) fn free(id: u64) {
-        SYSTEM.with(|sys| sys.borrow_mut().identities.free(id))
+        SYSTEM.with(|sys| match *sys.borrow_mut() {
+            SystemState::Empty => panic!("System is uninitialized"),
+            SystemState::Running(ref mut s) => s.identities.free(id),
+            SystemState::Stopped(_) => panic!("System stopped"),
+        });
     }
 
     /// Register an intereset for a reactor with epol.
     pub fn arm(as_fd: &impl AsRawFd, interest: epoll::Interest, reactor_id: u64) -> Result<()> {
-        SYSTEM.with(|sys| {
-            let sys = sys.borrow();
-            if !sys.initialized {
-                panic!("System uninitialized");
+        SYSTEM.with(|sys| match *sys.borrow() {
+            SystemState::Empty => panic!("System is uninitialized"),
+            SystemState::Running(ref sys) => {
+                epoll::arm(
+                    sys.epoll_fd,
+                    as_fd.as_raw_fd(),
+                    interest,
+                    reactor_id,
+                )
             }
-
-            epoll::arm(
-                sys.epoll_fd,
-                as_fd.as_raw_fd(),
-                interest,
-                reactor_id,
-            )
-        })?;
+            SystemState::Stopped(_) => panic!("System stopped"),
+        });
         Ok(())
     }
 
@@ -150,19 +150,18 @@ impl System {
     /// Since this is operating in one-shot mode this should happen after an event 
     /// is passed to a reactor.
     pub fn rearm(as_fd: &impl AsRawFd, interest: epoll::Interest, reactor_id: u64) -> Result<()> {
-        SYSTEM.with(|sys| {
-            let sys = sys.borrow();
-            if !sys.initialized {
-                panic!("System uninitialized");
+        SYSTEM.with(|sys| match *sys.borrow() {
+            SystemState::Empty => panic!("System is uninitialized"),
+            SystemState::Running(ref sys) => {
+                epoll::rearm(
+                    sys.epoll_fd,
+                    as_fd.as_raw_fd(),
+                    interest,
+                    reactor_id,
+                )
             }
-
-            epoll::rearm(
-                sys.epoll_fd,
-                as_fd.as_raw_fd(),
-                interest,
-                reactor_id,
-            )
-        })?;
+            SystemState::Stopped(_) => panic!("System stopped"),
+        });
         Ok(())
     }
 
@@ -171,10 +170,15 @@ impl System {
     where
         T: Reactor<Input = ()>,
     {
-        let capacity = SYSTEM.with(|sys| sys.borrow().event_cap);
-        let mut rx = SYSTEM.with(|sys| sys.borrow_mut().rx.take()).expect("this should never be None");
-        let mut events: Vec<libc::epoll_event> = Vec::with_capacity(capacity);
-        unsafe { events.set_len(capacity) };
+        let event_cap = SYSTEM.with(|sys| match *sys.borrow() {
+            SystemState::Empty => panic!("System is uninitialized"),
+            SystemState::Stopped(_) => panic!("System stopped"),
+            SystemState::Running(ref s) => s.event_cap,
+        });
+
+        // let mut rx = SYSTEM.with(|sys| sys.borrow_mut().rx.take());//.expect("this should never be None");
+        let mut events: Vec<libc::epoll_event> = Vec::with_capacity(event_cap);
+        unsafe { events.set_len(event_cap) };
 
         let timeout = 0;
         // Have zero ms timeout for epoll.
@@ -184,35 +188,39 @@ impl System {
         // 2. Check user defined events
         // 3. ??? <-- don't cook the fish
         'system: loop {
-            let count = SYSTEM
-                .with(|sys| epoll::wait(sys.borrow().epoll_fd, &mut events, capacity as i32, timeout))?;
+            let count = SYSTEM.with(|sys| match *sys.borrow() {
+                SystemState::Empty => panic!("System is uninitialized"),
+                SystemState::Stopped(_) => panic!("System stopped"),
+                SystemState::Running(ref sys) => epoll::wait(sys.epoll_fd, &mut events, event_cap as i32, timeout)
+            })?;
 
             for epoll_event in events.drain(..count) {
-
                 let event = crate::Event {
                     read: Flags::contains(epoll_event.events, Flags::Read),
                     write: Flags::contains(epoll_event.events, Flags::Write),
                     owner: epoll_event.u64,
                 };
 
+                eprintln!("{:?}", epoll_event.events);
+
                 let reaction = Reaction::Event(event);
 
                 // Shut down the system by breaking the loop.
-                if epoll_event.u64 == rx.reactor_id() {
-                    if Flags::contains(epoll_event.events, Flags::Read) {
-                        if let Reaction::Value(sys_ev) = rx.react(reaction) {
-                            match sys_ev {
-                                Ok(SysEvent::Stop) => break 'system,
-                                _ => {}
-                            }
-                        }
-                    }
-                } else {
+                // if epoll_event.u64 == rx.reactor_id() {
+                //     if Flags::contains(epoll_event.events, Flags::Read) {
+                //         if let Reaction::Value(sys_ev) = rx.react(reaction) {
+                //             match sys_ev {
+                //                 Ok(SysEvent::Stop) => break 'system,
+                //                 _ => {}
+                //             }
+                //         }
+                //     }
+                // } else {
                     reactor.react(reaction);
-                }
+                // }
             }
 
-            unsafe { events.set_len(capacity) };
+            unsafe { events.set_len(event_cap) };
             // Run game loop
         }
 
@@ -221,7 +229,8 @@ impl System {
 
     /// Shut down the system and close the epoll file descriptor.
     pub fn shutdown() -> Result<()> {
-        SYSTEM.with(|sys| epoll::close(sys.borrow().epoll_fd))?;
+        // TODO: implement this
+        // SYSTEM.with(|sys| epoll::close(sys.borrow().epoll_fd))?;
         Ok(())
     }
 }

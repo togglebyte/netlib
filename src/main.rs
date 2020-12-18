@@ -1,110 +1,63 @@
-use std::collections::HashMap;
-use std::io::ErrorKind::WouldBlock;
-use std::io::{Read, Write};
-use std::net::SocketAddr;
+use std::io::Read;
+use std::os::unix::io::AsRawFd;
 use std::thread;
 
-use netlib::net::tcp::{TcpListener, TcpStream};
-use netlib::{Interest, Reaction, Reactor, System, signals::signal, Result};
+use netlib::{Evented, Reaction, Reactor, Result, System, SysEvent};
 
-// Connection: Closed
-// const RESPONSE: &'static [u8] = br#"HTTP/1.1 200 OK
-// Server: Lark
-// Content-Length: 600
-// content-type: text/html; charset=UTF-8
-
-// hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello
-// "#;
-static RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\nContent-Length: 13\n\nhello world\n\n";
-
-pub struct HttpServer {
-    thread_id: usize,
-    msg_count: usize,
-    b: [u8; 1024],
-    con: HashMap<u64, TcpStream>,
+struct MyData {
+    evented: Evented,
 }
 
-impl HttpServer {
-    pub fn new(thread_id: usize) -> Self {
-        Self {
-            thread_id,
-            msg_count: 0,
-            b: [0; 1024],
-            con: HashMap::new(),
-        }
+impl MyData {
+    fn new() -> Result<Self> {
+        let evented = Evented::new()?;
+
+        let inst = Self {
+            evented,
+        };
+
+        Ok(inst)
     }
 }
 
-impl Reactor for HttpServer {
-    type Input = TcpStream;
+impl AsRawFd for MyData {
+    fn as_raw_fd(&self) -> i32 {
+        self.evented.as_raw_fd()
+    }
+}
+
+impl Reactor for MyData {
+    type Input = ();
     type Output = ();
 
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
-            Reaction::Value(stream) => {
-                self.con.insert(stream.id, stream);
-                Reaction::Continue
-            }
-            Reaction::Value(_) => Reaction::Continue,
+            Reaction::Value(val) => Reaction::Value(val),
             Reaction::Continue => Reaction::Continue,
+            Reaction::Event(ev) if ev.owner != self.evented.reactor_id => Reaction::Event(ev),
             Reaction::Event(ev) => {
-                let b = &mut self.b;
-                let mut close = false;
-                self.con.get_mut(&ev.owner).map(|con| {
-                    con.writable = ev.write;
-                    con.readable = ev.read;
-
-                    while con.readable {
-                        con.read(b);
-                    }
-
-                    while con.writable {
-                        con.write(&RESPONSE);
-                    }
-                });
-                Reaction::Continue
+                eprintln!("reaction happened");
+                self.evented.do_read();
+                let res = self.evented.rearm();
+                Reaction::Event(ev) 
             }
         }
     }
 }
 
 fn main() -> Result<()> {
-    let thread_count = 8;
-    // let mut handles = Vec::new();
+    System::builder().finish();
 
-    // let (rx, tx) = signal();
+    let my_data = MyData::new()?;
 
-    let listener = TcpListener::bind("127.0.0.1:9000")?
-        .map(Result::unwrap)
-        .map(|(stream, _)| {
-            stream.set_nonblocking(true);
-            TcpStream::new(stream, Interest::ReadWrite).unwrap()
-        });
+    let mut evented = my_data.evented.clone();
+    thread::spawn(move ||  {
+        loop {
+            thread::sleep_ms(1000);
+            evented.poke();
+        }
+    });
 
-    // for thread_id in 0..thread_count {
-    //     let h = thread::spawn(move || -> Result<()> {
-    //         // Initialise the system
-    //         System::builder().finish()?;
-
-    //         let listener = TcpListener::bind("127.0.0.1:9000")?
-    //             .map(Result::unwrap)
-    //             .map(|(stream, _)| {
-    //                 stream.set_nonblocking(true);
-    //                 TcpStream::new(stream, Interest::ReadWrite).unwrap()
-    //             });
-
-    //         let server = listener.chain(HttpServer::new(thread_id));
-
-    //         // Start the server
-    //         System::start(server)?;
-
-    //         Ok(())
-    //     });
-
-    //     handles.push(h);
-    // }
-
-    // handles.into_iter().map(|h| h.join()).count();
-
+    System::start(my_data)?;
     Ok(())
 }
