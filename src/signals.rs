@@ -1,6 +1,6 @@
 use crossbeam::channel::{unbounded, Receiver as CBReceiver, Sender as CBSender};
 
-use crate::{Evented, Reaction, Reactor, Result};
+use crate::{System, Evented, Reaction, Reactor, Result, Interest};
 
 pub fn signal<T: Clone>() -> Result<(Sender<T>, Receiver<T>)> {
     let (tx, rx) = unbounded();
@@ -19,6 +19,37 @@ pub fn signal<T: Clone>() -> Result<(Sender<T>, Receiver<T>)> {
 }
 
 // -----------------------------------------------------------------------------
+//     - Sender -
+// -----------------------------------------------------------------------------
+pub struct Sender<T: Clone> {
+    evented: Evented,
+    tx: CBSender<T>,
+}
+
+impl<T: Clone> Sender<T> {
+    pub fn send(&mut self, val: T) {
+        self.tx.send(val.clone());
+        self.evented.poke();
+    }
+}
+
+impl<T: Clone> Reactor for Sender<T> {
+    type Input = T;
+    type Output = ();
+
+    fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
+        match reaction {
+            Reaction::Event(ev) => Reaction::Event(ev),
+            Reaction::Value(val) => {
+                self.send(val);
+                Reaction::Value(())
+            }
+            Reaction::Continue => Reaction::Continue,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 //     - Reveiver -
 // -----------------------------------------------------------------------------
 #[derive(Debug, Clone)]
@@ -34,6 +65,11 @@ impl<T> Receiver<T> {
 
     pub fn reactor_id(&self) -> u64 {
         self.evented.reactor_id
+    }
+
+    pub fn arm(&mut self) -> Result<()> {
+        self.evented.reactor_id = System::reserve();
+        System::arm(&self.evented.fd, Interest::Read, self.evented.reactor_id)
     }
 }
 
@@ -57,20 +93,5 @@ impl<T> Reactor for Receiver<T> {
                 Reaction::Value(val)
             }
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-//     - Sender -
-// -----------------------------------------------------------------------------
-pub struct Sender<T: Clone> {
-    evented: Evented,
-    tx: CBSender<T>,
-}
-
-impl<T: Clone> Sender<T> {
-    pub fn send(&mut self, val: T) {
-        self.tx.send(val.clone());
-        self.evented.poke();
     }
 }

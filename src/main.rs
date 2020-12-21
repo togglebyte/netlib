@@ -4,6 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use netlib::queue::{Stealer, Worker};
+use netlib::signals::{signal, Sender};
 use netlib::{Evented, Reaction, Reactor, Result, SysEvent, System, Timer};
 
 // -----------------------------------------------------------------------------
@@ -11,22 +12,26 @@ use netlib::{Evented, Reaction, Reactor, Result, SysEvent, System, Timer};
 //     Aka the worker
 // -----------------------------------------------------------------------------
 struct Provider {
-    worker: Worker<usize>,
+    // producer: Worker<usize>,
+    producer: Sender<usize>,
+    count: usize,
     timer: Timer,
 }
 
 impl Provider {
-    fn new() -> Result<Self> {
+    fn new(producer: Sender<usize>) -> Result<Self> {
         let inst = Self {
-            worker: Worker::new()?,
+            producer,
+            // producer: Worker::new()?,
             timer: Timer::new(Duration::new(2, 0), Some(Duration::from_millis(1000)))?,
+            count: 0,
         };
 
         Ok(inst)
     }
 
     fn send(&mut self, val: usize) {
-        self.worker.react(Reaction::Value(val));
+        self.producer.react(Reaction::Value(val));
     }
 }
 
@@ -39,7 +44,8 @@ impl Reactor for Provider {
             Reaction::Event(ev) if ev.owner != self.timer.reactor_id => Reaction::Event(ev),
             Reaction::Event(ev) => {
                 self.timer.consume_event();
-                self.send(123);
+                self.send(self.count);
+                self.count += 1;
                 Reaction::Continue
             }
             Reaction::Value(val) => Reaction::Value(val),
@@ -49,21 +55,23 @@ impl Reactor for Provider {
 }
 
 // -----------------------------------------------------------------------------
-//     - Maion -
+//     - Main -
 // -----------------------------------------------------------------------------
 fn main() -> Result<()> {
     System::builder().finish();
 
-    let provider = Provider::new()?;
+    let (tx, rx) = signal()?;
+    let provider = Provider::new(tx)?;
 
-    let thread_count = 10;
+    let thread_count = 4;
 
     for thread_id in 0..thread_count {
-        let mut stealer = provider.worker.dequeue();
+        // let mut receiver = provider.producer.dequeue();
+        let mut receiver = rx.clone();
         thread::spawn(move || {
             System::builder().finish();
-            stealer.arm();
-            let r = stealer.map(|val| eprintln!("{} | {}", thread_id, val));
+            receiver.arm();
+            let r = receiver.map(|val| eprintln!("{} | {}", thread_id, val.unwrap()));
             System::start(r);
         });
     }
