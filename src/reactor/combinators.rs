@@ -1,3 +1,6 @@
+//! Chain...
+//! ```rust
+//! ```
 use super::{Reactor, Reaction};
 
 // -----------------------------------------------------------------------------
@@ -17,7 +20,7 @@ where
     A: Reactor,
     B: Reactor<Input = A::Output>,
 {
-    pub fn new(first: A, second: B) -> Self {
+    pub(crate) fn new(first: A, second: B) -> Self {
         Self {
             first,
             second
