@@ -1,39 +1,41 @@
-use crossbeam::channel::{unbounded, Receiver as CBReceiver, Sender as CBSender};
+use crossbeam::channel::{bounded, Receiver as CBReceiver, Sender as CBSender};
 
-use crate::{System, Evented, Reaction, Reactor, Result, Interest};
-
-pub fn signal<T: Clone>() -> Result<(Sender<T>, Receiver<T>)> {
-    let (tx, rx) = unbounded();
-
-    let tx = Sender {
-        tx,
-        evented: Evented::new()?,
-    };
-
-    let rx = Receiver {
-        rx,
-        evented: tx.evented.clone(),
-    };
-
-    Ok((tx, rx))
-}
+use crate::{Evented, Interest, Reaction, Reactor, Result, System};
 
 // -----------------------------------------------------------------------------
-//     - Sender -
+//     - Broadcaster -
 // -----------------------------------------------------------------------------
-pub struct Sender<T: Clone> {
-    evented: Evented,
-    tx: CBSender<T>,
+pub struct Broadcaster<T: Clone> {
+    subscribers: Vec<(Evented, CBSender<T>)>,
+    event_cap: usize,
 }
 
-impl<T: Clone> Sender<T> {
+impl<T: Clone> Broadcaster<T> {
+    pub fn new(event_cap: usize) -> Self {
+        let inst = Self {
+            subscribers: Vec::new(),
+            event_cap,
+        };
+
+        inst
+    }
     pub fn send(&mut self, val: T) {
-        self.tx.send(val.clone());
-        self.evented.poke();
+        self.subscribers.iter_mut().for_each(|(e, tx)| {
+            e.poke();
+            tx.send(val.clone());
+        });
+    }
+
+    pub fn receiver(&mut self) -> Result<Receiver<T>> {
+        let evented = Evented::new()?;
+        let (tx, rx) = bounded(self.event_cap);
+        self.subscribers.push((evented.clone(), tx));
+        let rec = Receiver::new(rx, evented);
+        Ok(rec)
     }
 }
 
-impl<T: Clone> Reactor for Sender<T> {
+impl<T: Clone> Reactor for Broadcaster<T> {
     type Input = T;
     type Output = ();
 
@@ -59,6 +61,10 @@ pub struct Receiver<T> {
 }
 
 impl<T> Receiver<T> {
+    fn new(rx: CBReceiver<T>, evented: Evented) -> Self {
+        Self { rx, evented }
+    }
+
     fn rcv(&self) {
         self.rx.try_recv();
     }
@@ -76,7 +82,6 @@ impl<T> Receiver<T> {
 impl<T> Reactor for Receiver<T> {
     type Input = ();
     type Output = Result<T>;
-
 
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {

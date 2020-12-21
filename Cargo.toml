@@ -11,3 +11,4 @@ panic = 'abort'
 [dependencies]
 libc = "0.2.80"
 crossbeam = "0.8.0"
+rand = "0.8.0"

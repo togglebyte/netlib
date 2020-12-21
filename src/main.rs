@@ -4,8 +4,12 @@ use std::thread;
 use std::time::Duration;
 
 use netlib::queue::{Stealer, Worker};
-use netlib::signals::{signal, Sender};
+use netlib::broadcast::Broadcaster;
 use netlib::{Evented, Reaction, Reactor, Result, SysEvent, System, Timer};
+
+use rand::prelude::*;
+
+const THREAD_COUNT: usize = 3;
 
 // -----------------------------------------------------------------------------
 //     - Provider -
@@ -13,17 +17,17 @@ use netlib::{Evented, Reaction, Reactor, Result, SysEvent, System, Timer};
 // -----------------------------------------------------------------------------
 struct Provider {
     // producer: Worker<usize>,
-    producer: Sender<usize>,
+    producer: Broadcaster<usize>,
     count: usize,
     timer: Timer,
 }
 
 impl Provider {
-    fn new(producer: Sender<usize>) -> Result<Self> {
+    fn new(producer: Broadcaster<usize>) -> Result<Self> {
         let inst = Self {
             producer,
             // producer: Worker::new()?,
-            timer: Timer::new(Duration::new(2, 0), Some(Duration::from_millis(1000)))?,
+            timer: Timer::new(Duration::new(1, 0), Some(Duration::from_millis(100)))?,
             count: 0,
         };
 
@@ -60,18 +64,20 @@ impl Reactor for Provider {
 fn main() -> Result<()> {
     System::builder().finish();
 
-    let (tx, rx) = signal()?;
-    let provider = Provider::new(tx)?;
+    let tx = Broadcaster::new(100);
+    let mut provider = Provider::new(tx)?;
 
-    let thread_count = 4;
-
-    for thread_id in 0..thread_count {
+    for thread_id in 0..THREAD_COUNT {
         // let mut receiver = provider.producer.dequeue();
-        let mut receiver = rx.clone();
+        let mut receiver = provider.producer.receiver()?;
         thread::spawn(move || {
             System::builder().finish();
             receiver.arm();
-            let r = receiver.map(|val| eprintln!("{} | {}", thread_id, val.unwrap()));
+            let r = receiver.map(|val| {
+                let s = thread_rng().gen_range(100..3000);
+                thread::sleep(Duration::from_millis(s));
+                eprintln!("{} | {} | sleep: {}", thread_id, val.unwrap(), s);
+            });
             System::start(r);
         });
     }

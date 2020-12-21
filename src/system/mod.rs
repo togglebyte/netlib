@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::os::unix::io::AsRawFd;
 
 use crate::{Reaction, Reactor, Result};
-use crate::signals::{Sender, Receiver, signal};
+// use crate::signals::{Sender, Receiver, signal};
 
 mod identities;
 mod epoll;
@@ -82,7 +82,7 @@ pub struct System {
     epoll_fd: i32,
     identities: Identities,
     event_cap: usize,
-    rx: Option<Receiver<SysEvent>>,
+    // rx: Option<Receiver<SysEvent>>,
 }
 
 impl System {
@@ -93,7 +93,7 @@ impl System {
             epoll_fd,
             event_cap,
             identities: Identities::with_capacity(id_cap),
-            rx: None,
+            // rx: None,
         }
     }
 
