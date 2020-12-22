@@ -181,7 +181,7 @@ impl System {
         let mut events: Vec<libc::epoll_event> = Vec::with_capacity(event_cap);
         unsafe { events.set_len(event_cap) };
 
-        let timeout = 0;
+        let timeout = 200;
         // Have zero ms timeout for epoll.
         // Have timeout at application level.
         //
