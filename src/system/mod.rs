@@ -44,7 +44,7 @@ pub struct SystemBuilder {
 impl SystemBuilder {
     /// Set the event capacity.
     /// This is the number of events that will be passed to epoll.
-    pub fn with_capacity(&mut self, cap: usize) -> &mut Self {
+    pub fn event_cap(&mut self, cap: usize) -> &mut Self {
         self.event_cap = Some(cap);
         self
     }
