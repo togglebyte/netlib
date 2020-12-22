@@ -2,28 +2,48 @@ use crossbeam::deque::{Steal, Stealer as CBStealer, Worker as CBWorker};
 
 use crate::{Evented, Interest, Reaction, Reactor, Result, System};
 
+// TODO:
+// 1. Track all stealers as FDs in a vec
+// 2. Poke each FD on change
 // -----------------------------------------------------------------------------
 //     - Worker -
 // -----------------------------------------------------------------------------
 pub struct Worker<T> {
     inner: CBWorker<T>,
-    evented: Evented,
+    stealers: Vec<Evented>,
+    // evented: Evented,
+    current_stealer_id: usize,
 }
 
 impl<T> Worker<T> {
     pub fn new() -> Result<Self> {
         let inner = CBWorker::new_fifo();
-        let evented = Evented::new()?;
-        let inst = Self { inner, evented };
+
+        // let evented = Evented::new()?;
+        let inst = Self {
+            inner,
+            stealers: Vec::new(),
+            current_stealer_id: 0,
+        };
+
         Ok(inst)
     }
 
-    pub fn dequeue(&self) -> Stealer<T> {
-        Stealer::new(self.inner.stealer(), self.evented.clone())
+    pub fn dequeue(&mut self) -> Result<Stealer<T>> {
+        self.current_stealer_id += 1;
+        let evented = Evented::new()?;
+        self.stealers.push(evented.clone());
+        let inst = Stealer::new(
+            self.inner.stealer(),
+            evented,
+            self.current_stealer_id,
+        );
+
+        Ok(inst)
     }
 
     pub fn send(&mut self, val: T) {
-        self.evented.poke();
+        self.stealers.iter_mut().for_each(|s| { s.poke(); });
         self.inner.push(val)
     }
 }
@@ -35,9 +55,7 @@ impl<T> Reactor for Worker<T> {
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
             Reaction::Event(ev) => Reaction::Event(ev),
-            Reaction::Value(val) => {
-                Reaction::Value(self.send(val))
-            }
+            Reaction::Value(val) => Reaction::Value(self.send(val)),
             Reaction::Continue => Reaction::Continue,
         }
     }
@@ -48,12 +66,13 @@ impl<T> Reactor for Worker<T> {
 // -----------------------------------------------------------------------------
 pub struct Stealer<T> {
     inner: CBStealer<T>,
+    id: usize,
     pub evented: Evented,
 }
 
 impl<T> Stealer<T> {
-    fn new(inner: CBStealer<T>, evented: Evented) -> Self {
-        Self { inner, evented }
+    fn new(inner: CBStealer<T>, evented: Evented, id: usize) -> Self {
+        Self { inner, evented, id }
     }
 
     pub fn arm(&mut self) -> Result<()> {
@@ -64,18 +83,19 @@ impl<T> Stealer<T> {
 
 impl<T> Reactor for Stealer<T> {
     type Input = ();
-    type Output = T;
+    type Output = Result<T>;
 
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match reaction {
             Reaction::Event(ev) if ev.owner != self.evented.reactor_id => Reaction::Event(ev),
             Reaction::Event(ev) => {
-                let res = self.evented.consume_event();
-                loop {
-                    let res = self.inner.steal();
+                if let Err(e) = self.evented.consume_event() {
+                    return Reaction::Value(Err(e));
+                }
 
-                    match res {
-                        Steal::Success(val) => break Reaction::Value(val),
+                loop {
+                    match self.inner.steal() {
+                        Steal::Success(val) => break Reaction::Value(Ok(val)),
                         Steal::Retry => continue,
                         Steal::Empty => break Reaction::Continue,
                     }
