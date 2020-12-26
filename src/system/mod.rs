@@ -57,7 +57,7 @@ impl SystemBuilder {
     }
 
     /// Finish the `System` and set it up for the local thread.
-    pub fn finish(self) {//-> Result<Sender<SysEvent>> {
+    pub fn finish(self) {
         let reactor_ids = self.id_capacity.unwrap_or(1024);
         let event_cap = self.event_cap.unwrap_or(10);
 

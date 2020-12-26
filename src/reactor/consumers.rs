@@ -2,6 +2,9 @@ use std::marker::PhantomData;
 
 use crate::{Reaction, Reactor};
 
+// -----------------------------------------------------------------------------
+//     - Map -
+// -----------------------------------------------------------------------------
 pub struct Map<T, F, U>
 where
     T: Reactor,
@@ -39,6 +42,34 @@ where
             Reaction::Value(val) => Reaction::Value((self.f)(val)),
             Reaction::Continue => Reaction::Continue,
             Reaction::Event(e) => Reaction::Event(e),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+//     - Filter -
+// -----------------------------------------------------------------------------
+pub struct FilterMap<T, U>
+    where T: Reactor<Output=Option<U>>,
+{
+    reactor: T,
+    // _p1: PhantomData<U>
+}
+
+impl<T, U> Reactor for FilterMap<T, U>
+    where T: Reactor<Output=Option<U>>,
+{
+    type Input = T::Input;
+    type Output = U;
+
+    fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
+        match self.reactor.react(reaction) {
+            Reaction::Event(ev) => Reaction::Event(ev),
+            Reaction::Value(val) => match val {
+                Some(v) => Reaction::Value(v),
+                None => Reaction::Continue,
+            }
+            Reaction::Continue => Reaction::Continue,
         }
     }
 }

@@ -6,12 +6,14 @@ mod errors;
 mod reactor;
 mod system;
 mod codecs;
+mod memchr;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System, SysEvent};
 pub use system::evented::Evented;
 pub use system::timer::Timer;
 pub use errors::{Error, Result, os_err};
+pub use memchr::memchr;
 
 #[derive(Debug)]
 pub struct Event {

@@ -2,9 +2,6 @@ use crossbeam::deque::{Steal, Stealer as CBStealer, Worker as CBWorker};
 
 use crate::{Evented, Interest, Reaction, Reactor, Result, System};
 
-// TODO:
-// 1. Track all stealers as FDs in a vec
-// 2. Poke each FD on change
 // -----------------------------------------------------------------------------
 //     - Worker -
 // -----------------------------------------------------------------------------
