@@ -49,15 +49,35 @@ where
 // -----------------------------------------------------------------------------
 //     - Filter -
 // -----------------------------------------------------------------------------
-pub struct FilterMap<T, U>
-    where T: Reactor<Output=Option<U>>,
+pub struct FilterMap<T, F, U>
+    where 
+        T: Reactor,
+        F: FnMut(T::Output) -> Option<U>,
 {
     reactor: T,
-    // _p1: PhantomData<U>
+    f: F,
+    _p1: PhantomData<U>
 }
 
-impl<T, U> Reactor for FilterMap<T, U>
-    where T: Reactor<Output=Option<U>>,
+impl<T, F, U> FilterMap<T, F, U>
+where
+    T: Reactor,
+    F: FnMut(T::Output) -> Option<U>,
+{
+    pub fn new(reactor: T, f: F) -> Self {
+        Self {
+            reactor,
+            f,
+            _p1: PhantomData,
+        }
+    }
+}
+
+
+impl<T, F, U> Reactor for FilterMap<T, F, U>
+    where 
+        T: Reactor,
+        F: FnMut(T::Output) -> Option<U>,
 {
     type Input = T::Input;
     type Output = U;
@@ -65,7 +85,7 @@ impl<T, U> Reactor for FilterMap<T, U>
     fn react(&mut self, reaction: Reaction<Self::Input>) -> Reaction<Self::Output> {
         match self.reactor.react(reaction) {
             Reaction::Event(ev) => Reaction::Event(ev),
-            Reaction::Value(val) => match val {
+            Reaction::Value(val) => match (self.f)(val) {
                 Some(v) => Reaction::Value(v),
                 None => Reaction::Continue,
             }

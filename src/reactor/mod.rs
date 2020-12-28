@@ -7,7 +7,7 @@ use crate::{Interest, System, Result};
 mod combinators;
 mod consumers;
 
-pub use consumers::Map;
+pub use consumers::{FilterMap, Map};
 pub use combinators::Chain;
 
 pub type ReactorId = u64;
@@ -46,6 +46,12 @@ pub trait Reactor : Sized {
         where F: FnMut(Self::Output) -> T
     {
         Map::new(self, f)
+    }
+
+    fn filter_map<T, F>(self, f: F) -> FilterMap<Self, F, T>
+        where F: FnMut(Self::Output) -> Option<T>
+    {
+        FilterMap::new(self, f)
     }
 
     fn react(&mut self, val: Reaction<Self::Input>) -> Reaction<Self::Output>;
