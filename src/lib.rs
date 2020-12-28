@@ -6,6 +6,7 @@ mod errors;
 mod reactor;
 mod system;
 mod codecs;
+mod memchr;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System, SysEvent};
