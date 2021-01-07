@@ -16,7 +16,7 @@ use netlib::{Interest, Reaction, Reactor, Result, System};
 
 // hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello
 // "#;
-static RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\nContent-Length: 13\n\nhello world\n\n";
+static RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\nConnection: Closed\nContent-Length: 13\n\nhello world\n\n";
 
 pub struct HttpServer {
     thread_id: usize,
@@ -52,14 +52,15 @@ impl Reactor for HttpServer {
                 let b = &mut self.b;
                 let mut close = false;
                 self.con.get_mut(&ev.owner).map(|con| {
-                    con.writable = ev.write;
-                    con.readable = ev.read;
+                    con.update(&ev);
+                    // con.writable = ev.write;
+                    // con.readable = ev.read;
 
-                    while con.readable {
+                    while con.readable() {
                         con.read(b);
                     }
 
-                    while con.writable {
+                    while con.writable() {
                         con.write(&RESPONSE);
                     }
                 });

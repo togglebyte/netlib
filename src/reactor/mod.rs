@@ -1,8 +1,9 @@
 use std::io::{self, Read, Write};
 use std::io::ErrorKind::WouldBlock;
 use std::os::unix::io::AsRawFd;
+use std::fmt;
 
-use crate::{Interest, System, Result};
+use crate::{Interest, System, Result, Event};
 
 mod combinators;
 mod consumers;
@@ -64,8 +65,8 @@ pub trait Reactor : Sized {
 pub struct PollReactor<T: AsRawFd> {
     inner: T,
     pub id: ReactorId,
-    pub writable: bool,
-    pub readable: bool,
+    writable: bool,
+    readable: bool,
 }
 
 impl<T: AsRawFd> PollReactor<T> {
@@ -87,6 +88,26 @@ impl<T: AsRawFd> PollReactor<T> {
         System::rearm(&self.inner, interest, self.id)?;
         Ok(())
     }
+
+    pub fn update(&mut self, ev: &Event) {
+        self.readable = ev.read;
+        self.writable = ev.write;
+    }
+
+    pub fn readable(&self) -> bool {
+        self.readable
+    }
+
+    pub fn writable(&self) -> bool {
+        self.writable
+    }
+}
+
+impl<T: AsRawFd> AsRawFd for PollReactor<T> {
+    fn as_raw_fd(&self) -> i32 {
+        self.inner.as_raw_fd()
+    }
+
 }
 
 // -----------------------------------------------------------------------------
@@ -128,7 +149,11 @@ impl<T: AsRawFd + Read> Read for PollReactor<T> {
             Ok(_) => {}
             Err(ref e) if e.kind() == WouldBlock => {
                 self.readable = false;
-                self.rearm(Interest::Read);
+                if self.writable {
+                    self.rearm(Interest::ReadWrite);
+                } else {
+                    self.rearm(Interest::Read);
+                }
             }
             Err(_) => self.readable = false,
 
@@ -161,3 +186,11 @@ impl<T: AsRawFd + Write> Write for PollReactor<T> {
     }
 }
 
+// -----------------------------------------------------------------------------
+//     - Debug -
+// -----------------------------------------------------------------------------
+impl<T: fmt::Debug + AsRawFd> fmt::Debug for PollReactor<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<PollReactor {:?} read: {}, write: {}>", self.inner, self.readable, self.writable)
+    }
+}

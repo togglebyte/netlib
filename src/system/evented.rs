@@ -7,7 +7,7 @@ use libc::eventfd;
 use super::System;
 use crate::{res, Interest, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Evented {
     pub fd: i32,
     pub reactor_id: u64,

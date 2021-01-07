@@ -1,3 +1,4 @@
+#![allow(warnings)]
 pub mod net;
 pub mod broadcast;
 pub mod queue;
@@ -14,7 +15,7 @@ pub use system::evented::Evented;
 pub use system::timer::Timer;
 pub use errors::{Error, Result, os_err};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Event {
     pub read: bool,
     pub write: bool,
