@@ -13,6 +13,9 @@ use identities::Identities;
 use epoll::Flags;
 pub use epoll::Interest;
 
+pub struct Armed { p: *const () }
+pub struct Unarmed;
+
 // -----------------------------------------------------------------------------
 //     - TLS System -
 // -----------------------------------------------------------------------------

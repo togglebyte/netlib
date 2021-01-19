@@ -1,6 +1,9 @@
+use std::marker::PhantomData;
+
 use crossbeam::channel::{bounded, Receiver as CBReceiver, Sender as CBSender};
 
 use crate::{Evented, Interest, Reaction, Reactor, Result, System};
+use crate::system::{Armed, Unarmed};
 
 // -----------------------------------------------------------------------------
 //     - Broadcaster -
@@ -19,6 +22,7 @@ impl<T: Clone> Broadcaster<T> {
 
         inst
     }
+
     pub fn send(&mut self, val: T) {
         self.subscribers.iter_mut().for_each(|(e, tx)| {
             e.poke();
@@ -26,7 +30,7 @@ impl<T: Clone> Broadcaster<T> {
         });
     }
 
-    pub fn receiver(&mut self) -> Result<Receiver<T>> {
+    pub fn receiver(&mut self) -> Result<Receiver<Unarmed, T>> {
         let evented = Evented::new()?;
         let (tx, rx) = bounded(self.event_cap);
         self.subscribers.push((evented.clone(), tx));
@@ -52,34 +56,48 @@ impl<T: Clone> Reactor for Broadcaster<T> {
 }
 
 // -----------------------------------------------------------------------------
-//     - Reveiver -
+//     - Receiver -
 // -----------------------------------------------------------------------------
+pub type ArmedReceiver<T> = Receiver<Armed, T>;
+
 #[derive(Debug, Clone)]
-pub struct Receiver<T> {
+pub struct Receiver<U, T> {
     evented: Evented,
     rx: CBReceiver<T>,
+    _p: PhantomData<U>,
 }
 
-impl<T> Receiver<T> {
-    fn new(rx: CBReceiver<T>, evented: Evented) -> Self {
-        Self { rx, evented }
-    }
-
-    fn rcv(&self) {
-        self.rx.try_recv();
+impl<T> Receiver<Armed, T> {
+    pub fn rcv(&self) -> Result<T> {
+        let val = self.rx.try_recv()?;
+        Ok(val)
     }
 
     pub fn reactor_id(&self) -> u64 {
         self.evented.reactor_id
     }
+}
 
-    pub fn arm(&mut self) -> Result<()> {
+impl<T> Receiver<Unarmed, T> {
+    fn new(rx: CBReceiver<T>, evented: Evented) -> Self {
+        Self { rx, evented, _p: PhantomData }
+    }
+
+    pub fn arm(mut self) -> Result<Receiver<Armed, T>> {
         self.evented.reactor_id = System::reserve();
-        System::arm(&self.evented.fd, Interest::Read, self.evented.reactor_id)
+        System::arm(&self.evented.fd, Interest::Read, self.evented.reactor_id)?;
+
+        let inst = Receiver {
+            evented: self.evented,
+            rx: self.rx,
+            _p: PhantomData,
+        };
+
+        Ok(inst)
     }
 }
 
-impl<T> Reactor for Receiver<T> {
+impl<T> Reactor for Receiver<Armed, T> {
     type Input = ();
     type Output = Result<T>;
 
