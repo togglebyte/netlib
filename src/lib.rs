@@ -3,11 +3,11 @@ pub mod net;
 pub mod broadcast;
 pub mod queue;
 pub mod memchr;
+pub mod mpsc;
 
 mod errors;
 mod reactor;
 mod system;
-mod codecs;
 
 pub use reactor::{Reaction, Reactor, PollReactor};
 pub use system::{Interest, System, SysEvent};

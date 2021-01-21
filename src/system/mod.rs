@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::cell::RefCell;
 use std::os::unix::io::AsRawFd;
 
@@ -13,7 +14,8 @@ use identities::Identities;
 use epoll::Flags;
 pub use epoll::Interest;
 
-pub struct Armed { p: *const () }
+pub struct Armed { p: PhantomData<*const ()> }
+#[derive(Debug, Clone)] 
 pub struct Unarmed;
 
 // -----------------------------------------------------------------------------

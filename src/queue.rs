@@ -8,7 +8,6 @@ use crate::{Evented, Interest, Reaction, Reactor, Result, System};
 pub struct Worker<T> {
     inner: CBWorker<T>,
     stealers: Vec<Evented>,
-    // evented: Evented,
     current_stealer_id: usize,
 }
 
